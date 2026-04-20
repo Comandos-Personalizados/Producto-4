@@ -34,11 +34,11 @@ def main():
                 print("\nOpción 1 seleccionada. La lógica estará en funciones_red.py.")
                 input("\nPresiona ENTER para continuar...")
                 
-            elif opcion == '2':
-                print("\nOpción 2 seleccionada. La lógica estará en funciones_red.py.")
+            if opcion == '1':
+                funciones_red.resolucion_dominios()
                 input("\nPresiona ENTER para continuar...")
                 
-            elif opcion == '3':
+            elif opcion == '2':
                 print("\nOpción 3 seleccionada. La lógica estará en funciones_red.py.")
                 input("\nPresiona ENTER para continuar...")
                 
