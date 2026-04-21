@@ -39,10 +39,10 @@ def main():
                 input("\nPresiona ENTER para continuar...")
                 
             elif opcion == '2':
-                print("\nOpción 3 seleccionada. La lógica estará en funciones_red.py.")
+                funciones_red.exportar_configuracion_local()
                 input("\nPresiona ENTER para continuar...")
                 
-            elif opcion == '4':
+            elif opcion == '3':
                 print("\nOpción 4 seleccionada. La lógica estará en funciones_red.py.")
                 input("\nPresiona ENTER para continuar...")
                 
