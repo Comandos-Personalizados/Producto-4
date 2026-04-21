@@ -30,11 +30,7 @@ def main():
         try:
             opcion = input("\nElige una opción (1-5): ")
             
-            elif opcion == '4':
-                funciones_red.evaluar_y_modificar_dns()
-                input("\nPresiona ENTER para continuar...")
-                
-            elif opcion == '5':
+            if opcion == '1':
                 funciones_red.resolucion_dominios()
                 input("\nPresiona ENTER para continuar...")
                 
@@ -47,6 +43,10 @@ def main():
                 input("\nPresiona ENTER para continuar...")
                 
             elif opcion == '4':
+                funciones_red.evaluar_y_modificar_dns()
+                input("\nPresiona ENTER para continuar...")
+                
+            elif opcion == '5':
                 print("\nSaliendo del optimizador. ¡Hasta pronto!")
                 sys.exit(0)
                 
