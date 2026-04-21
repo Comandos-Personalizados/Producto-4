@@ -30,11 +30,11 @@ def main():
         try:
             opcion = input("\nElige una opción (1-5): ")
             
-            if opcion == '1':
-                print("\nOpción 1 seleccionada. La lógica estará en funciones_red.py.")
+            elif opcion == '4':
+                funciones_red.evaluar_y_modificar_dns()
                 input("\nPresiona ENTER para continuar...")
                 
-            if opcion == '1':
+            elif opcion == '5':
                 funciones_red.resolucion_dominios()
                 input("\nPresiona ENTER para continuar...")
                 
