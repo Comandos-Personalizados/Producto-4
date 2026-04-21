@@ -33,6 +33,50 @@ def exportar_configuracion_local():
     except Exception as e:
         print(f"\n[!] Ocurrió un error inesperado al exportar la configuración: {str(e)}")
 
+def seleccion_adaptador():
+    """
+    Extrae y muestra los adaptadores de red activos utilizando netsh.
+    Permite al usuario elegir un adaptador y muestra su servidor DNS actual.
+    """
+    print("\n--- SELECCIÓN DE ADAPTADOR Y DNS ACTUAL ---")
+    
+    try:
+        # Ejecutamos el comando para mostrar los interfaces
+        resultado = subprocess.run(
+            ['netsh', 'interface', 'ipv4', 'show', 'interfaces'],
+            capture_output=True, text=True, check=True
+        )
+        
+        print("\nAdaptadores de red disponibles:\n")
+        # Mostramos la salida original para que el usuario vea los nombres
+        print(resultado.stdout)
+        
+        # Solicitamos al usuario que escriba manualmente el nombre del adaptador
+        nombre_adaptador = input("Introduce el Nombre del adaptador tal como aparece arriba (ej. 'Wi-Fi' o 'Ethernet'): ").strip()
+        
+        if not nombre_adaptador:
+            print("\n[!] Error: No has introducido ningún nombre de adaptador.")
+            return
+            
+        print(f"\nObteniendo configuración DNS actual para el adaptador: '{nombre_adaptador}'...\n")
+        
+        # Ejecutamos el comando para extraer los servidores DNS del adaptador elegido
+        # Se proporciona el argumento name=<Nombre> para acotar la búsqueda al específico
+        resultado_dns = subprocess.run(
+            ['netsh', 'interface', 'ipv4', 'show', 'dnsservers', f'name={nombre_adaptador}'],
+            capture_output=True, text=True, check=True
+        )
+        
+        # Imprimimos la salida con la información del DNS actual
+        print(resultado_dns.stdout)
+        
+    except FileNotFoundError:
+        print("\n[!] Error: El comando 'netsh' no está disponible en este sistema (es exclusivo de Windows).")
+    except subprocess.CalledProcessError as e:
+        print(f"\n[!] Error al ejecutar comando de red. ¿El nombre del adaptador '{nombre_adaptador}' es correcto?")
+    except Exception as e:
+        print(f"\n[!] Ocurrió un error inesperado: {str(e)}")
+
 def resolucion_dominios():
     """
     Pide al usuario la ruta del archivo de texto con los dominios,

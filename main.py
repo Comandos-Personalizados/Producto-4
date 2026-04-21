@@ -43,10 +43,10 @@ def main():
                 input("\nPresiona ENTER para continuar...")
                 
             elif opcion == '3':
-                print("\nOpción 4 seleccionada. La lógica estará en funciones_red.py.")
+                funciones_red.seleccion_adaptador()
                 input("\nPresiona ENTER para continuar...")
                 
-            elif opcion == '5':
+            elif opcion == '4':
                 print("\nSaliendo del optimizador. ¡Hasta pronto!")
                 sys.exit(0)
                 
