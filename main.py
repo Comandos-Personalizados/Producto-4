@@ -3,65 +3,55 @@ import sys
 import funciones_red
 
 def mostrar_menu():
-    """
-    Función para mostrar el menú principal de la aplicación.
-    Limpia la pantalla antes de mostrar las opciones para mantener una consola limpia.
-    """
     os.system('cls' if os.name == 'nt' else 'clear')
     print("========================================")
-    print("      OPTIMIZADOR DE CONEXIÓN DNS       ")
+    print("      Optimizador de conexión DNS       ")
     print("              Producto 3                ")
     print("========================================")
-    print("1. Resolución de dominios (Punto 4 del menú)")
-    print("2. Exportar configuración local (Punto 5 del menú)")
-    print("3. Selección de adaptador y DNS actual (Puntos 6 y 7 del menú)")
-    print("4. Benchmarking de DNS y modificación (Punto 8 y 9 del menú)")
+    print("1. Resolución de dominios")
+    print("2. Exportar configuración local")
+    print("3. Selección de adaptador y DNS actual")
+    print("4. Benchmarking de DNS y modificación")
     print("5. Salir")
     print("========================================")
 
 def main():
-    """
-    Función principal que maneja el bucle del programa (while True).
-    Lee la opción elegida por el usuario y ejecuta la acción correspondiente.
-    """
     while True:
         mostrar_menu()
-        
+
         try:
             opcion = input("\nElige una opción (1-5): ")
-            
+
             if opcion == '1':
                 funciones_red.resolucion_dominios()
-                input("\nPresiona ENTER para continuar...")
-                
+                input("\nPulsa ENTER para continuar...")
+
             elif opcion == '2':
                 funciones_red.exportar_configuracion_local()
-                input("\nPresiona ENTER para continuar...")
-                
+                input("\nPulsa ENTER para continuar...")
+
             elif opcion == '3':
                 funciones_red.seleccion_adaptador()
-                input("\nPresiona ENTER para continuar...")
-                
+                input("\nPulsa ENTER para continuar...")
+
             elif opcion == '4':
                 funciones_red.evaluar_y_modificar_dns()
-                input("\nPresiona ENTER para continuar...")
-                
+                input("\nPulsa ENTER para continuar...")
+
             elif opcion == '5':
-                print("\nSaliendo del optimizador. ¡Hasta pronto!")
+                print("\nSaliendo.")
                 sys.exit(0)
-                
+
             else:
-                print("\n[!] Opción no válida. Por favor, selecciona un número entre 1 y 5.")
-                input("\nPresiona ENTER para continuar...")
-        
+                print("\n[!] Opción no válida. Introduce un número del 1 al 5.")
+                input("\nPulsa ENTER para continuar...")
+
         except KeyboardInterrupt:
-            # Captura si el usuario presiona Ctrl+C en la consola
-            print("\n\nSaliendo de forma segura...")
+            print("\n\nInterrumpido por el usuario. Saliendo.")
             sys.exit(0)
         except Exception as e:
-            # Captura cualquier otro error imprevisto
-            print(f"\n[!] Ha ocurrido un error inesperado: {str(e)}")
-            input("\nPresiona ENTER para continuar...")
+            print(f"\n[!] Error inesperado: {str(e)}")
+            input("\nPulsa ENTER para continuar...")
 
 if __name__ == "__main__":
     main()
