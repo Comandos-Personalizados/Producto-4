@@ -3,6 +3,90 @@ import os
 import subprocess
 import re
 
+import generador_xml
+
+
+def generar_xml_adaptador():
+    """Flujo principal del Producto 4: pide un adaptador, recoge sus datos y crea el XML.
+
+    Pasos:
+        1. Lista los adaptadores disponibles vía netsh.
+        2. Pide al usuario que escoja uno (por número o por nombre exacto).
+        3. Extrae IP, máscara, puerta de enlace y DNS primario con ipconfig /all.
+        4. Mide la velocidad media de respuesta del DNS con ping.
+        5. Lanza tracert al DNS y guarda el número de saltos y la IP de cada uno.
+        6. Llama al módulo generador_xml para escribir el archivo XML resultante.
+    """
+    print("\n--- Generación del archivo XML de red ---")
+
+    adaptadores = listar_adaptadores()
+    if not adaptadores:
+        print("\n[!] No se han podido detectar adaptadores. Introduce el nombre manualmente.")
+    else:
+        print("\nAdaptadores detectados:")
+        for i, nombre in enumerate(adaptadores, start=1):
+            print(f"  {i}. {nombre}")
+
+    seleccion = input("\nIntroduce el número del adaptador o su nombre exacto: ").strip()
+    if not seleccion:
+        print("\n[!] No has introducido ningún valor. Operación cancelada.")
+        return
+
+    # Permitimos seleccionar por índice (más cómodo) o escribiendo el nombre.
+    if seleccion.isdigit() and adaptadores:
+        idx = int(seleccion)
+        if 1 <= idx <= len(adaptadores):
+            nombre_adaptador = adaptadores[idx - 1]
+        else:
+            print("\n[!] Índice fuera de rango. Operación cancelada.")
+            return
+    else:
+        nombre_adaptador = seleccion
+
+    print(f"\n[i] Adaptador seleccionado: {nombre_adaptador}")
+
+    print("[i] Extrayendo IP, máscara, puerta de enlace y DNS primario...")
+    datos = obtener_datos_adaptador(nombre_adaptador)
+
+    if not datos.get('ip'):
+        print("\n[!] No se ha podido extraer la IP del adaptador. ¿Está conectado y el nombre es correcto?")
+        # Aun así seguimos con lo que tengamos para que el XML refleje el estado real.
+
+    print(f"  IP:             {datos.get('ip') or 'N/D'}")
+    print(f"  Máscara:        {datos.get('mascara') or 'N/D'}")
+    print(f"  Puerta enlace:  {datos.get('puerta_enlace') or 'N/D'}")
+    print(f"  DNS primario:   {datos.get('dns_primario') or 'N/D'}")
+
+    velocidad = None
+    saltos = []
+    ip_dns = datos.get('dns_primario')
+
+    if ip_dns:
+        print(f"\n[i] Midiendo velocidad media de ping a {ip_dns}...")
+        velocidad = obtener_velocidad_dns(ip_dns)
+        if velocidad is not None:
+            print(f"  Velocidad media: {velocidad} ms")
+        else:
+            print("  [!] No se pudo medir la velocidad media (sin respuesta).")
+
+        print(f"\n[i] Trazando ruta hasta {ip_dns} (esto puede tardar)...")
+        saltos = obtener_trazado(ip_dns)
+        if saltos:
+            print(f"  Saltos totales: {len(saltos)}")
+            for numero, ip_salto in saltos:
+                print(f"    {numero:>2}. {ip_salto}")
+        else:
+            print("  [!] No se ha obtenido ningún salto del tracert.")
+    else:
+        print("\n[!] Sin DNS primario; se omiten ping y tracert.")
+
+    ruta_destino = input("\nNombre del archivo XML a generar (ENTER para 'red.xml'): ").strip() or 'red.xml'
+
+    if generador_xml.generar_xml_red(nombre_adaptador, datos, velocidad, saltos, ruta_destino):
+        print(f"\n[+] Archivo XML generado correctamente: '{ruta_destino}'")
+    else:
+        print("\n[!] No se ha podido generar el archivo XML.")
+
 
 def listar_adaptadores():
     """Devuelve una lista con los nombres de los adaptadores de red activos.

@@ -6,13 +6,14 @@ def mostrar_menu():
     os.system('cls' if os.name == 'nt' else 'clear')
     print("========================================")
     print("      Optimizador de conexión DNS       ")
-    print("              Producto 3                ")
+    print("              Producto 4                ")
     print("========================================")
     print("1. Resolución de dominios")
     print("2. Exportar configuración local")
     print("3. Selección de adaptador y DNS actual")
     print("4. Benchmarking de DNS y modificación")
-    print("5. Salir")
+    print("5. Generar archivo XML del adaptador")
+    print("6. Salir")
     print("========================================")
 
 def main():
@@ -20,7 +21,7 @@ def main():
         mostrar_menu()
 
         try:
-            opcion = input("\nElige una opción (1-5): ")
+            opcion = input("\nElige una opción (1-6): ")
 
             if opcion == '1':
                 funciones_red.resolucion_dominios()
@@ -39,11 +40,15 @@ def main():
                 input("\nPulsa ENTER para continuar...")
 
             elif opcion == '5':
+                funciones_red.generar_xml_adaptador()
+                input("\nPulsa ENTER para continuar...")
+
+            elif opcion == '6':
                 print("\nSaliendo.")
                 sys.exit(0)
 
             else:
-                print("\n[!] Opción no válida. Introduce un número del 1 al 5.")
+                print("\n[!] Opción no válida. Introduce un número del 1 al 6.")
                 input("\nPulsa ENTER para continuar...")
 
         except KeyboardInterrupt:
