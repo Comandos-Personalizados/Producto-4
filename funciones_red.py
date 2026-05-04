@@ -1,3 +1,11 @@
+"""Librería de funciones de red usada por main.py.
+
+Contiene la lógica del Producto 3 (resolución de dominios, exportación de
+configuración, selección de adaptador, benchmarking de DNS) más las funciones
+nuevas del Producto 4 (extracción de datos del adaptador, ping, tracert y
+flujo orquestador que delega la escritura del XML en generador_xml).
+"""
+
 import socket
 import os
 import subprocess
@@ -246,6 +254,7 @@ def obtener_trazado(ip_dns, max_saltos=30):
 
 
 def exportar_configuracion_local():
+    """Vuelca la salida de 'ipconfig /all' a 'configuracionlocal.txt'."""
     print("\n--- Exportar configuración local ---")
 
     try:
@@ -266,6 +275,7 @@ def exportar_configuracion_local():
         print(f"\n[!] Error inesperado al exportar la configuración: {str(e)}")
 
 def seleccion_adaptador():
+    """Muestra los adaptadores disponibles y los DNS configurados en el elegido."""
     print("\n--- Selección de adaptador y DNS actual ---")
 
     try:
@@ -300,6 +310,7 @@ def seleccion_adaptador():
         print(f"\n[!] Error inesperado: {str(e)}")
 
 def resolucion_dominios():
+    """Lee un fichero de dominios y muestra la IP asociada a cada uno."""
     print("\n--- Resolución de dominios ---")
     ruta_archivo = input("Introduce la ruta del archivo de dominios (ej. web.txt): ")
 
@@ -340,6 +351,7 @@ def resolucion_dominios():
         print(f"\n[!] Error inesperado al leer el archivo: {str(e)}")
 
 def evaluar_y_modificar_dns():
+    """Hace ping a una lista de DNS, los ordena por velocidad y aplica el ganador."""
     print("\n--- Benchmarking de DNS y modificación ---")
 
     nombre_adaptador = input("Introduce el nombre del adaptador a configurar (ej. 'Wi-Fi' o 'Ethernet'): ").strip()

@@ -1,8 +1,17 @@
+"""Punto de entrada de la aplicación.
+
+Muestra el menú principal y delega cada opción en la función correspondiente
+de la librería funciones_red. La opción 5 (Producto 4) genera un archivo XML
+con la información de red del adaptador seleccionado.
+"""
+
 import os
 import sys
 import funciones_red
 
+
 def mostrar_menu():
+    """Limpia la pantalla y dibuja el menú principal."""
     os.system('cls' if os.name == 'nt' else 'clear')
     print("========================================")
     print("      Optimizador de conexión DNS       ")
@@ -17,6 +26,7 @@ def mostrar_menu():
     print("========================================")
 
 def main():
+    """Bucle principal: muestra el menú, lee la opción y ejecuta la acción."""
     while True:
         mostrar_menu()
 
