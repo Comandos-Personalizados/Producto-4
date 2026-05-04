@@ -3,6 +3,164 @@ import os
 import subprocess
 import re
 
+
+def listar_adaptadores():
+    """Devuelve una lista con los nombres de los adaptadores de red activos.
+
+    Lanza 'netsh interface ipv4 show interfaces' y parsea la última columna
+    de cada fila de datos (que contiene el nombre del adaptador).
+    Retorna una lista de strings; vacía si el comando falla.
+    """
+    nombres = []
+    try:
+        resultado = subprocess.run(
+            ['netsh', 'interface', 'ipv4', 'show', 'interfaces'],
+            capture_output=True, text=True, encoding='cp850', check=True
+        )
+
+        # Las líneas útiles empiezan con espacios y una columna numérica (Idx).
+        # Formato: Idx  Mét  MTU   Estado          Nombre
+        for linea in resultado.stdout.splitlines():
+            partes = linea.split()
+            if len(partes) >= 5 and partes[0].isdigit():
+                # El nombre del adaptador puede contener espacios -> unimos a partir del índice 4
+                nombre = ' '.join(partes[4:])
+                nombres.append(nombre)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        pass
+    except Exception:
+        pass
+
+    return nombres
+
+
+def obtener_datos_adaptador(nombre_adaptador):
+    """Extrae IP, máscara, puerta de enlace y DNS primario del adaptador indicado.
+
+    Ejecuta 'ipconfig /all', localiza la sección del adaptador buscado y aplica
+    expresiones regulares para extraer los campos relevantes. Devuelve un dict:
+        {'ip': ..., 'mascara': ..., 'puerta_enlace': ..., 'dns_primario': ...}
+    Cada campo será una cadena o None si no se encuentra.
+    """
+    datos = {'ip': None, 'mascara': None, 'puerta_enlace': None, 'dns_primario': None}
+
+    try:
+        resultado = subprocess.run(
+            ['ipconfig', '/all'],
+            capture_output=True, text=True, encoding='cp850', check=True
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return datos
+
+    salida = resultado.stdout
+
+    # Localizamos el bloque del adaptador. ipconfig agrupa por "Adaptador X NombreAdaptador:".
+    # Dividimos por dobles saltos de línea para tratar cada bloque independientemente.
+    bloques = re.split(r'\r?\n\r?\n', salida)
+    bloque_adaptador = None
+    nombre_norm = nombre_adaptador.strip().lower()
+
+    for bloque in bloques:
+        cabecera = bloque.splitlines()[0] if bloque.strip() else ''
+        # Buscamos el bloque cuya primera línea contenga el nombre del adaptador.
+        if nombre_norm and nombre_norm in cabecera.lower():
+            bloque_adaptador = bloque
+            break
+
+    if bloque_adaptador is None:
+        return datos
+
+    # Patrones tolerantes a la variación de etiquetas en español/inglés de Windows.
+    patron_ip = re.compile(r'(?:Direcci[oó]n IPv4|IPv4 Address)[\.\s]*:\s*([\d\.]+)', re.IGNORECASE)
+    patron_mascara = re.compile(r'(?:M[aá]scara de subred|Subnet Mask)[\.\s]*:\s*([\d\.]+)', re.IGNORECASE)
+    patron_gateway = re.compile(r'(?:Puerta de enlace predeterminada|Default Gateway)[\.\s]*:\s*([\d\.]+)', re.IGNORECASE)
+    patron_dns = re.compile(r'(?:Servidores DNS|DNS Servers)[\.\s]*:\s*([\d\.]+)', re.IGNORECASE)
+
+    m = patron_ip.search(bloque_adaptador)
+    if m:
+        datos['ip'] = m.group(1)
+
+    m = patron_mascara.search(bloque_adaptador)
+    if m:
+        datos['mascara'] = m.group(1)
+
+    m = patron_gateway.search(bloque_adaptador)
+    if m:
+        datos['puerta_enlace'] = m.group(1)
+
+    m = patron_dns.search(bloque_adaptador)
+    if m:
+        datos['dns_primario'] = m.group(1)
+
+    return datos
+
+
+def obtener_velocidad_dns(ip_dns, intentos=4):
+    """Lanza un ping al DNS y devuelve el tiempo medio en ms (float) o None si falla."""
+    if not ip_dns:
+        return None
+
+    try:
+        cmd = ['ping', '-n', str(intentos), ip_dns] if os.name == 'nt' else ['ping', '-c', str(intentos), ip_dns]
+        res = subprocess.run(cmd, capture_output=True, text=True, encoding='cp850')
+
+        if res.returncode != 0:
+            return None
+
+        # Windows (es): "Media = 15ms" / Windows (en): "Average = 15ms"
+        m_win = re.search(r'(?:Media|Average)\s*=\s*(\d+)\s*ms', res.stdout, re.IGNORECASE)
+        if m_win:
+            return float(m_win.group(1))
+
+        # Linux: "rtt min/avg/max/mdev = 0.123/0.456/0.789/0.012 ms"
+        m_lin = re.search(r'=\s*[\d.]+/([\d.]+)/[\d.]+/', res.stdout)
+        if m_lin:
+            return float(m_lin.group(1))
+
+    except Exception:
+        return None
+
+    return None
+
+
+def obtener_trazado(ip_dns, max_saltos=30):
+    """Ejecuta tracert hasta la IP del DNS y devuelve la lista de IPs por salto.
+
+    Devuelve una lista de tuplas (numero_salto, ip_salto). Si en un salto no se
+    obtiene IP (timeout, '*'), se devuelve la cadena '*' como ip de ese salto.
+    """
+    saltos = []
+    if not ip_dns:
+        return saltos
+
+    try:
+        if os.name == 'nt':
+            cmd = ['tracert', '-d', '-h', str(max_saltos), ip_dns]
+        else:
+            cmd = ['traceroute', '-n', '-m', str(max_saltos), ip_dns]
+
+        res = subprocess.run(cmd, capture_output=True, text=True, encoding='cp850')
+    except FileNotFoundError:
+        return saltos
+    except Exception:
+        return saltos
+
+    # Cada línea válida empieza con el número de salto. Extraemos la primera IP que aparezca.
+    patron_ip = re.compile(r'\b(\d{1,3}(?:\.\d{1,3}){3})\b')
+    for linea in res.stdout.splitlines():
+        linea_strip = linea.strip()
+        m_num = re.match(r'^(\d+)\s', linea_strip)
+        if not m_num:
+            continue
+
+        numero = int(m_num.group(1))
+        m_ip = patron_ip.search(linea_strip)
+        ip_salto = m_ip.group(1) if m_ip else '*'
+        saltos.append((numero, ip_salto))
+
+    return saltos
+
+
 def exportar_configuracion_local():
     print("\n--- Exportar configuración local ---")
 
