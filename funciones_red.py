@@ -15,19 +15,20 @@ import generador_xml
 
 
 def _detectar_encoding_consola():
-    """Devuelve la code page activa de la consola (p.ej. 'cp850' o 'utf-8').
+    """Devuelve la code page OEM de Windows (p.ej. 'cp850'), o 'utf-8' fuera de Windows.
 
-    En Windows lo intenta vía GetConsoleOutputCP; fuera de Windows o si falla,
-    'utf-8'. Se usa SOLO como fallback cuando el contenido no es UTF-8 válido,
-    porque algunos comandos (netsh moderno) ignoran la code page y emiten UTF-8.
+    Se usa SOLO como fallback cuando el contenido no es UTF-8 válido. Los
+    comandos legacy como ipconfig.exe emiten SIEMPRE bytes en la code page OEM
+    del sistema (no en la code page activa de la consola, que en PowerShell
+    suele estar en 65001/UTF-8). Por eso aquí preguntamos a GetOEMCP, no a
+    GetConsoleOutputCP: si la consola está en UTF-8 pero ipconfig vuelca bytes
+    en CP850, necesitamos saber CP850 para descodificar correctamente.
     """
     if os.name != 'nt':
         return 'utf-8'
     try:
         import ctypes
-        cp = ctypes.windll.kernel32.GetConsoleOutputCP()
-        if cp == 65001:
-            return 'utf-8'
+        cp = ctypes.windll.kernel32.GetOEMCP()
         if cp:
             return f'cp{cp}'
     except Exception:
@@ -222,17 +223,30 @@ def obtener_datos_adaptador(nombre_adaptador):
 
     salida = _decodificar_consola(resultado.stdout)
 
-    # Localizamos el bloque del adaptador. ipconfig agrupa por "Adaptador X NombreAdaptador:".
-    # Dividimos por dobles saltos de línea para tratar cada bloque independientemente.
-    bloques = re.split(r'\r?\n\r?\n', salida)
+    # Localizamos el bloque del adaptador. ipconfig separa cabecera y cuerpo
+    # con una línea en blanco, por lo que NO sirve partir por dobles saltos:
+    # la cabecera quedaría sola en su bloque, sin los campos. En su lugar,
+    # detectamos las cabeceras (líneas sin sangría, con 'adaptador', y que
+    # acaban en ':') y tomamos todo lo que hay hasta la siguiente cabecera.
+    lineas = salida.splitlines()
+    indices_cabeceras = [
+        i for i, linea in enumerate(lineas)
+        if linea and not linea[0].isspace()
+        and linea.rstrip().endswith(':')
+        and 'adaptador' in linea.lower()
+    ]
+
     bloque_adaptador = None
     nombre_norm = nombre_adaptador.strip().lower()
+    # Anclamos al final de la cabecera precedido por espacio para evitar que
+    # 'Ethernet' case con 'vEthernet (WSL ...)' o con 'Ethernet 5'.
+    patron_nombre = re.compile(r'(?:^|\s)' + re.escape(nombre_norm) + r'$')
 
-    for bloque in bloques:
-        cabecera = bloque.splitlines()[0] if bloque.strip() else ''
-        # Buscamos el bloque cuya primera línea contenga el nombre del adaptador.
-        if nombre_norm and nombre_norm in cabecera.lower():
-            bloque_adaptador = bloque
+    for k, idx in enumerate(indices_cabeceras):
+        nombre_en_cabecera = re.sub(r':\s*$', '', lineas[idx]).strip().lower()
+        if nombre_norm and patron_nombre.search(nombre_en_cabecera):
+            fin = indices_cabeceras[k + 1] if k + 1 < len(indices_cabeceras) else len(lineas)
+            bloque_adaptador = '\n'.join(lineas[idx:fin])
             break
 
     if bloque_adaptador is None:

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<red>
+    <adaptador nombre="Ethernet">
+        <ip>192.168.0.20</ip>
+        <mascara>255.255.255.0</mascara>
+        <puerta_enlace>192.168.0.1</puerta_enlace>
+        <dns_primario>192.168.0.1</dns_primario>
+        <velocidad_dns unidad="ms">0.0</velocidad_dns>
+        <trazado saltos_totales="1">
+            <salto numero="1">192.168.0.1</salto>
+        </trazado>
+    </adaptador>
+</red>
