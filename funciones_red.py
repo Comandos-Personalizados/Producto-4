@@ -100,28 +100,67 @@ def listar_adaptadores():
     """Devuelve una lista con los nombres de los adaptadores de red activos.
 
     Lanza 'netsh interface ipv4 show interfaces' y parsea la última columna
-    de cada fila de datos (que contiene el nombre del adaptador).
+    de cada fila de datos (que contiene el nombre del adaptador). El parseo
+    se ancla a la línea separadora de guiones para localizar la columna
+    'Nombre' por posición, lo que tolera estados con espacios (p.ej.
+    'no operativo') y distintos idiomas/encodings de la consola.
     Retorna una lista de strings; vacía si el comando falla.
     """
     nombres = []
     try:
-        resultado = subprocess.run(
+        proc = subprocess.run(
             ['netsh', 'interface', 'ipv4', 'show', 'interfaces'],
-            capture_output=True, text=True, encoding='cp850', check=True
+            capture_output=True, check=False
         )
+    except FileNotFoundError:
+        print("[!] 'netsh' no está disponible (¿no es Windows?).")
+        return nombres
+    except Exception as e:
+        print(f"[!] Error ejecutando netsh: {e}")
+        return nombres
 
-        # Las líneas útiles empiezan con espacios y una columna numérica (Idx).
-        # Formato: Idx  Mét  MTU   Estado          Nombre
-        for linea in resultado.stdout.splitlines():
+    # La consola de Windows puede usar cp850, cp1252, utf-8 o mbcs según
+    # la versión y la configuración. Probamos en orden y caemos a 'replace'
+    # como último recurso: aunque algún acento se vea raro, el parseo
+    # (basado en dígitos y espacios) seguirá funcionando.
+    salida = None
+    for enc in ('cp850', 'cp1252', 'utf-8', 'mbcs'):
+        try:
+            salida = proc.stdout.decode(enc)
+            break
+        except (UnicodeDecodeError, LookupError):
+            continue
+    if salida is None:
+        salida = proc.stdout.decode('utf-8', errors='replace')
+
+    lineas = salida.splitlines()
+
+    pos_nombre = None
+    for linea in lineas:
+        contenido = linea.strip()
+        if contenido and set(contenido) <= {'-', ' '}:
+            m = re.search(r'-+\s*$', linea)
+            if m:
+                pos_nombre = m.start()
+            break
+
+    if pos_nombre is not None:
+        for linea in lineas:
+            ls = linea.lstrip()
+            if ls[:1].isdigit() and len(linea) > pos_nombre:
+                nombre = linea[pos_nombre:].strip()
+                if nombre:
+                    nombres.append(nombre)
+    else:
+        # Fallback: si no aparece la línea separadora, partimos por
+        # espacios y asumimos cuatro columnas previas al nombre.
+        for linea in lineas:
             partes = linea.split()
             if len(partes) >= 5 and partes[0].isdigit():
-                # El nombre del adaptador puede contener espacios -> unimos a partir del índice 4
-                nombre = ' '.join(partes[4:])
-                nombres.append(nombre)
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        pass
-    except Exception:
-        pass
+                nombres.append(' '.join(partes[4:]))
+
+    if not nombres:
+        print("[!] 'netsh' respondió pero no se han identificado adaptadores en la salida.")
 
     return nombres
 
