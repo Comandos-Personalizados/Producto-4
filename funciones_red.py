@@ -14,6 +14,55 @@ import re
 import generador_xml
 
 
+def _detectar_encoding_consola():
+    """Devuelve la code page activa de la consola (p.ej. 'cp850' o 'utf-8').
+
+    En Windows lo intenta vía GetConsoleOutputCP; fuera de Windows o si falla,
+    'utf-8'. Se usa SOLO como fallback cuando el contenido no es UTF-8 válido,
+    porque algunos comandos (netsh moderno) ignoran la code page y emiten UTF-8.
+    """
+    if os.name != 'nt':
+        return 'utf-8'
+    try:
+        import ctypes
+        cp = ctypes.windll.kernel32.GetConsoleOutputCP()
+        if cp == 65001:
+            return 'utf-8'
+        if cp:
+            return f'cp{cp}'
+    except Exception:
+        pass
+    return 'cp850'
+
+
+CONSOLA_ENC = _detectar_encoding_consola()
+
+
+def _decodificar_consola(data_bytes):
+    """Decodifica bytes de un comando de consola.
+
+    Estrategia: probamos UTF-8 estricto primero. Si los bytes son UTF-8 válido
+    (lo que pasa con netsh y otros comandos modernos de Windows aunque la
+    consola esté en chcp 850), nos quedamos con eso; si no, caemos a la code
+    page detectada de la consola. Esto evita el bug de antes, en el que
+    decodificar como cp850 a ciegas siempre 'funcionaba' (cp850 es de un byte
+    y nunca lanza UnicodeDecodeError) pero convertía la 'ó' (UTF-8 c3 b3) en
+    el par '├│'.
+    """
+    if data_bytes is None:
+        return ''
+    if isinstance(data_bytes, str):
+        return data_bytes
+    try:
+        return data_bytes.decode('utf-8')
+    except UnicodeDecodeError:
+        pass
+    try:
+        return data_bytes.decode(CONSOLA_ENC)
+    except (UnicodeDecodeError, LookupError):
+        return data_bytes.decode('utf-8', errors='replace')
+
+
 def generar_xml_adaptador():
     """Flujo principal del Producto 4: pide un adaptador, recoge sus datos y crea el XML.
 
@@ -119,19 +168,7 @@ def listar_adaptadores():
         print(f"[!] Error ejecutando netsh: {e}")
         return nombres
 
-    # La consola de Windows puede usar cp850, cp1252, utf-8 o mbcs según
-    # la versión y la configuración. Probamos en orden y caemos a 'replace'
-    # como último recurso: aunque algún acento se vea raro, el parseo
-    # (basado en dígitos y espacios) seguirá funcionando.
-    salida = None
-    for enc in ('cp850', 'cp1252', 'utf-8', 'mbcs'):
-        try:
-            salida = proc.stdout.decode(enc)
-            break
-        except (UnicodeDecodeError, LookupError):
-            continue
-    if salida is None:
-        salida = proc.stdout.decode('utf-8', errors='replace')
+    salida = _decodificar_consola(proc.stdout)
 
     lineas = salida.splitlines()
 
@@ -178,12 +215,12 @@ def obtener_datos_adaptador(nombre_adaptador):
     try:
         resultado = subprocess.run(
             ['ipconfig', '/all'],
-            capture_output=True, text=True, encoding='cp850', check=True
+            capture_output=True, check=True
         )
     except (FileNotFoundError, subprocess.CalledProcessError):
         return datos
 
-    salida = resultado.stdout
+    salida = _decodificar_consola(resultado.stdout)
 
     # Localizamos el bloque del adaptador. ipconfig agrupa por "Adaptador X NombreAdaptador:".
     # Dividimos por dobles saltos de línea para tratar cada bloque independientemente.
@@ -233,18 +270,20 @@ def obtener_velocidad_dns(ip_dns, intentos=4):
 
     try:
         cmd = ['ping', '-n', str(intentos), ip_dns] if os.name == 'nt' else ['ping', '-c', str(intentos), ip_dns]
-        res = subprocess.run(cmd, capture_output=True, text=True, encoding='cp850')
+        res = subprocess.run(cmd, capture_output=True)
 
         if res.returncode != 0:
             return None
 
+        salida = _decodificar_consola(res.stdout)
+
         # Windows (es): "Media = 15ms" / Windows (en): "Average = 15ms"
-        m_win = re.search(r'(?:Media|Average)\s*=\s*(\d+)\s*ms', res.stdout, re.IGNORECASE)
+        m_win = re.search(r'(?:Media|Average)\s*=\s*(\d+)\s*ms', salida, re.IGNORECASE)
         if m_win:
             return float(m_win.group(1))
 
         # Linux: "rtt min/avg/max/mdev = 0.123/0.456/0.789/0.012 ms"
-        m_lin = re.search(r'=\s*[\d.]+/([\d.]+)/[\d.]+/', res.stdout)
+        m_lin = re.search(r'=\s*[\d.]+/([\d.]+)/[\d.]+/', salida)
         if m_lin:
             return float(m_lin.group(1))
 
@@ -270,15 +309,17 @@ def obtener_trazado(ip_dns, max_saltos=30):
         else:
             cmd = ['traceroute', '-n', '-m', str(max_saltos), ip_dns]
 
-        res = subprocess.run(cmd, capture_output=True, text=True, encoding='cp850')
+        res = subprocess.run(cmd, capture_output=True)
     except FileNotFoundError:
         return saltos
     except Exception:
         return saltos
 
+    salida = _decodificar_consola(res.stdout)
+
     # Cada línea válida empieza con el número de salto. Extraemos la primera IP que aparezca.
     patron_ip = re.compile(r'\b(\d{1,3}(?:\.\d{1,3}){3})\b')
-    for linea in res.stdout.splitlines():
+    for linea in salida.splitlines():
         linea_strip = linea.strip()
         m_num = re.match(r'^(\d+)\s', linea_strip)
         if not m_num:
@@ -297,10 +338,10 @@ def exportar_configuracion_local():
     print("\n--- Exportar configuración local ---")
 
     try:
-        resultado = subprocess.run(['ipconfig', '/all'], capture_output=True, text=True, encoding='cp850', check=True)
+        resultado = subprocess.run(['ipconfig', '/all'], capture_output=True, check=True)
 
         with open('configuracionlocal.txt', 'w', encoding='utf-8') as archivo:
-            archivo.write(resultado.stdout)
+            archivo.write(_decodificar_consola(resultado.stdout))
 
         print("\nConfiguración de red exportada a 'configuracionlocal.txt'.")
 
@@ -320,11 +361,11 @@ def seleccion_adaptador():
     try:
         resultado = subprocess.run(
             ['netsh', 'interface', 'ipv4', 'show', 'interfaces'],
-            capture_output=True, text=True, encoding='cp850', check=True
+            capture_output=True, check=True
         )
 
         print("\nAdaptadores de red disponibles:\n")
-        print(resultado.stdout)
+        print(_decodificar_consola(resultado.stdout))
 
         nombre_adaptador = input("Introduce el nombre del adaptador tal como aparece arriba (ej. 'Wi-Fi' o 'Ethernet'): ").strip()
 
@@ -336,10 +377,10 @@ def seleccion_adaptador():
 
         resultado_dns = subprocess.run(
             ['netsh', 'interface', 'ipv4', 'show', 'dnsservers', f'name={nombre_adaptador}'],
-            capture_output=True, text=True, encoding='cp850', check=True
+            capture_output=True, check=True
         )
 
-        print(resultado_dns.stdout)
+        print(_decodificar_consola(resultado_dns.stdout))
 
     except FileNotFoundError:
         print("\n[!] El comando 'netsh' no está disponible en este sistema (es exclusivo de Windows).")
@@ -428,13 +469,14 @@ def evaluar_y_modificar_dns():
         print(f"Pinging {ip}...")
         try:
             cmd_ping = ['ping', '-n', '4', ip] if os.name == 'nt' else ['ping', '-c', '4', ip]
-            res_ping = subprocess.run(cmd_ping, capture_output=True, text=True, encoding='cp850')
+            res_ping = subprocess.run(cmd_ping, capture_output=True)
 
             tiempo_medio = float('inf')
 
             if res_ping.returncode == 0:
-                match_win = re.search(r'(?:Media|Average) = (\d+)ms', res_ping.stdout, re.IGNORECASE)
-                match_lin = re.search(r'mdev = [\d.]+/(.*?)/[\d.]+/', res_ping.stdout)
+                salida_ping = _decodificar_consola(res_ping.stdout)
+                match_win = re.search(r'(?:Media|Average) = (\d+)ms', salida_ping, re.IGNORECASE)
+                match_lin = re.search(r'mdev = [\d.]+/(.*?)/[\d.]+/', salida_ping)
 
                 if match_win:
                     tiempo_medio = float(match_win.group(1))
@@ -472,10 +514,10 @@ def evaluar_y_modificar_dns():
             print(f"Trazando ruta a {ip} (máx 15 saltos)...")
             try:
                 cmd_tr = ['tracert', '-d', '-h', '15', ip] if os.name == 'nt' else ['traceroute', '-n', '-m', '15', ip]
-                res_tr = subprocess.run(cmd_tr, capture_output=True, text=True, encoding='cp850')
+                res_tr = subprocess.run(cmd_tr, capture_output=True)
 
                 saltos = 0
-                for linea in res_tr.stdout.split('\n'):
+                for linea in _decodificar_consola(res_tr.stdout).split('\n'):
                     linea = linea.strip()
                     if re.match(r'^\d+', linea):
                         saltos += 1
@@ -513,13 +555,15 @@ def evaluar_y_modificar_dns():
                     'netsh', 'interface', 'ipv4', 'set', 'dnsservers',
                     f'name={nombre_adaptador}', 'static', ip_ganadora, 'primary'
                 ]
-                res_dns = subprocess.run(comando_dns, capture_output=True, text=True, encoding='cp850')
+                res_dns = subprocess.run(comando_dns, capture_output=True)
 
                 if res_dns.returncode == 0:
                     print(f"\nDNS del adaptador '{nombre_adaptador}' cambiado a {ip_ganadora}.")
                 else:
                     print("\n[!] No se pudo cambiar el DNS. Comprueba que has ejecutado el programa como Administrador.")
-                    print(f"Detalle: {res_dns.stderr.strip() or res_dns.stdout.strip()}")
+                    detalle = (_decodificar_consola(res_dns.stderr).strip()
+                               or _decodificar_consola(res_dns.stdout).strip())
+                    print(f"Detalle: {detalle}")
             except Exception as e:
                 print(f"\n[!] Error ejecutando netsh: {e}")
         else:
